@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星座神話クイズ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #030712; }
+  .star { position: absolute; border-radius: 50%; background: white; animation: twinkle var(--d, 3s) infinite; }
+  @keyframes twinkle { 0%,100%{opacity:0.3} 50%{opacity:1} }
+  canvas { cursor: pointer; }
+  .choice-btn { transition: all 0.15s; }
+  .choice-btn:hover { transform: translateX(4px); }
+  .correct { background: rgba(34,197,94,0.2) !important; border-color: rgb(34,197,94) !important; color: rgb(134,239,172) !important; }
+  .wrong { background: rgba(239,68,68,0.2) !important; border-color: rgb(239,68,68) !important; color: rgb(252,165,165) !important; }
+  .progress-bar { transition: width 0.4s ease; }
+</style>
+</head>
+<body class="min-h-screen text-white">
+
+<div id="bg-stars" class="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true"></div>
+
+<div class="relative max-w-3xl mx-auto px-4 py-8">
+  <div class="text-center mb-8">
+    <h1 class="text-3xl font-black tracking-widest mb-1">✦ 星座神話クイズ ✦</h1>
+    <p class="text-blue-300 text-sm">ギリシャ・ローマ神話 20問</p>
+  </div>
+
+  <div id="screen-start">
+    <div class="text-center py-16">
+      <canvas id="intro-canvas" width="300" height="300" class="mx-auto mb-6" aria-label="オリオン座の星座図"></canvas>
+      <p class="text-gray-400 mb-8 text-sm leading-relaxed">星座にまつわる神話の知識を試そう。<br>全20問・4択・正解後に神話解説あり。</p>
+      <button onclick="startQuiz()" class="px-10 py-4 bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-lg rounded-sm focus:outline-none focus:ring-4 focus:ring-indigo-400">
+        クイズ開始
+      </button>
+    </div>
+  </div>
+
+  <div id="screen-quiz" class="hidden">
+    <div class="mb-6">
+      <div class="flex justify-between text-xs text-gray-400 mb-2">
+        <span id="q-counter">1 / 20</span>
+        <span id="streak-display">連続正解: 0</span>
+      </div>
+      <div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div id="progress-bar" class="progress-bar h-full bg-indigo-500 rounded-full" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="bg-gray-900 border border-gray-700 rounded-sm p-5 mb-5">
+      <canvas id="constellation-canvas" width="280" height="180" class="mx-auto block mb-4 rounded-sm" aria-label="星座の図"></canvas>
+      <p class="text-xs text-blue-400 text-center mb-3" id="constellation-name"></p>
+      <p class="text-lg font-bold leading-relaxed" id="question-text"></p>
+    </div>
+
+    <div id="choices" class="space-y-3 mb-5"></div>
+
+    <div id="explanation" class="hidden bg-indigo-950 border border-indigo-700 rounded-sm p-5 mb-5">
+      <p class="text-green-400 font-bold mb-2" id="result-label"></p>
+      <p class="text-sm text-gray-300 leading-relaxed" id="explanation-text"></p>
+    </div>
+
+    <div class="text-center">
+      <button id="next-btn" onclick="nextQuestion()" class="hidden px-8 py-3 bg-indigo-700 hover:bg-indigo-600 text-white font-bold rounded-sm focus:outline-none focus:ring-4 focus:ring-indigo-400">
+        次の問題 →
+      </button>
+    </div>
+  </div>
+
+  <div id="screen-result" class="hidden">
+    <div class="text-center py-12">
+      <div class="text-6xl mb-4" id="result-emoji"></div>
+      <h2 class="text-2xl font-black mb-2">クイズ終了！</h2>
+      <p class="text-4xl font-black text-indigo-300 mb-2" id="final-score"></p>
+      <p class="text-gray-400 mb-2" id="final-rate"></p>
+      <p class="text-yellow-300 text-sm mb-8" id="max-streak"></p>
+      <button onclick="restartQuiz()" class="px-10 py-4 bg-indigo-700 hover:bg-indigo-600 text-white font-bold rounded-sm focus:outline-none focus:ring-4 focus:ring-indigo-400">
+        もう一度
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUIZZES = [
+  { constellation:"オリオン", q:"オリオンは何の名手として名高かったか？", choices:["弓の名手・狩人","音楽の神","海の勇者","冶金の達人"], ans:0, ex:"オリオンはギリシャ神話の巨人の狩人。アルテミスに愛されたが、アポロンの策略でアルテミス自身に射られ、天に星座として祀られた。" },
+  { constellation:"ペルセウス", q:"ペルセウスが退治した怪物は？", choices:["ヒュドラ","ゴルゴン（メドゥーサ）","ミノタウロス","ケルベロス"], ans:1, ex:"ペルセウスはアテナの盾を鏡に使い、直視すると石になるメドゥーサを退治した。その帰路でアンドロメダを海の怪物から救出した。" },
+  { constellation:"カシオペア", q:"カシオペアが神々の怒りを買った理由は？", choices:["神々の食物を盗んだ","娘が海のニンフより美しいと自慢した","海神ポセイドンを侮辱した","星座の場所を巡って争った"], ans:1, ex:"エチオピアの王妃カシオペアは「娘アンドロメダは海のニンフ（ネレイデス）より美しい」と自慢し、ポセイドンの怒りを招いた。罰としてアンドロメダは海の怪物への生贄にされた。" },
+  { constellation:"さそり", q:"さそり座とオリオン座が同時に空に現れない理由は？", choices:["星の明るさが干渉するから","オリオンをさそりが刺して殺したという神話があるから","アルテミスが二つの星座を引き離したから","太陽の位置の関係で天文学的に不可能だから"], ans:1, ex:"ガイアがオリオンの傲慢さに怒り、さそりを送って刺し殺したという神話がある。ゼウスが両者を天に上げたが、互いを避けるように正反対の空に置いたとされる。" },
+  { constellation:"おとめ", q:"おとめ座と結びついている女神は誰か？", choices:["アフロディテ（愛の女神）","デメテル/ペルセポネ（豊穣の女神）","アルテミス（狩猟の女神）","アテナ（知恵の女神）"], ans:1, ex:"おとめ座は豊穣の女神デメテルの娘ペルセポネとされる説が有力。ペルセポネが冥界に去る秋に穀物の女神が嘆き、彼女が戻る春に大地が実るという季節の起源神話と結びついている。" },
+  { constellation:"おうし", q:"おうし座の「すばる（プレアデス）」の7姉妹は何の神の娘たちか？", choices:["アポロン","アレス","アトラス","ポセイドン"], ans:2, ex:"プレアデス7姉妹はティタン神アトラスとオケアニデスのプレイオネの娘たち。オリオンに追われ続け、ゼウスに星に変えてもらったという神話がある。" },
+  { constellation:"双子（ジェミニ）", q:"双子座のカストルとポルックスはどんな英雄として知られるか？", choices:["アルゴ船の乗組員","トロイア戦争の英雄","十二労働を達成した英雄","海神ポセイドンの息子たち"], ans:0, ex:"カストルとポルックス（ディオスクロイ）はアルゴナウタイの一員。ポルックスはゼウスの息子で不死、カストルは人間の王ティンダレオスの息子。カストルが死んだ後、ポルックスが不死を分け合い交互に冥界と天界を行き来したとされる。" },
+  { constellation:"いて", q:"いて座はケンタウロスだが、特に何の名人とされるか？", choices:["剣術","弓術","予言","鍛冶"], ans:1, ex:"いて座はケンタウロスのケイロン（またはクロトス）とされる。ケイロンはアキレウスやアスクレピオスを育てた賢者で弓術の師。クロトスはムーサイの友人で拍手の発明者とも言われる。" },
+  { constellation:"りゅう", q:"りゅう座のラドンはどこで番人として働いていたか？", choices:["アポロンの神殿","ヘスペリデスの黄金のリンゴの園","海底の宝庫","オリュンポスの門"], ans:1, ex:"ラドンは眠らない竜で、ヘスペリデスの乙女たちが守る黄金のリンゴの木を守護していた。ヘラクレスの12労働の一つで退治され、ヘラが天に星座として祀ったとされる。" },
+  { constellation:"ヘルクレス（ヘラクレス）", q:"ヘラクレスが最初の労働として退治した怪物は？", choices:["ヒュドラ","ネメアのライオン","ゲリュオン","エリュマントスのイノシシ"], ans:1, ex:"ヘラクレスの12労働の第一は、不死のネメアのライオン退治。武器が通じないライオンを素手で絞め殺し、その皮を剥いで鎧とした。この皮がヘラクレスのトレードマークになった。" },
+  { constellation:"こと（リラ）", q:"こと座はオルフェウスの竪琴とされるが、彼はその竪琴で何をしたか？", choices:["神々を眠らせた","冥府の門を開けた","嵐を鎮めた","黄金の羊毛を守る竜を眠らせた"], ans:3, ex:"オルフェウスはアルゴナウタイとして黄金の羊毛探索に参加し、竪琴の演奏で竜を眠らせた。また妻エウリュディケを連れ戻しに冥府に下り、その音楽でハデスとペルセポネを感動させた。" },
+  { constellation:"わし（アクィラ）", q:"わし座はゼウスの鷲とされるが、ゼウスはその鷲で何をしたか？", choices:["ガニュメデスをさらいオリュンポスへ連れた","プロメテウスの肝臓を毎日食べた","ヘラを監視させた","敵国の城壁を破壊した"], ans:0, ex:"ゼウスは美少年ガニュメデスをわし（またはゼウス自身が変身）でオリュンポスに連れ去り、神々の給仕役（酌取り）とした。ガニュメデスはみずがめ座ともされる。" },
+  { constellation:"こぐま", q:"こぐま座はアルカスとされるが、彼の母はだれか？", choices:["カリスト","アルテミス","ヘラ","カリュプソ"], ans:0, ex:"カリストはアルテミスのニンフで、ゼウスに見初められ息子アルカスを産んだ。嫉妬したヘラ（またはアルテミス）がカリストをクマに変え、後にアルカスがその熊（母親）を狩ろうとした。ゼウスが二人を天に上げ大熊座・小熊座とした。" },
+  { constellation:"アンドロメダ", q:"アンドロメダを海の怪物から救ったのは誰か？", choices:["ヘラクレス","テセウス","ベレロフォン","ペルセウス"], ans:3, ex:"ペルセウスはメドゥーサ退治の帰路、鎖で岩に縛られたアンドロメダを発見。海の怪物ケートスに対し、袋から取り出したメドゥーサの首を見せて石に変えアンドロメダを救った。" },
+  { constellation:"ケフェウス", q:"ケフェウスはどの国の王だったか？", choices:["スパルタ","アルゴス","エチオピア","テバイ"], ans:2, ex:"ケフェウスはエチオピアの王。王妃カシオペアの虚言（ニンフより娘が美しい）が原因で娘アンドロメダを生贄に差し出さざるを得なくなったが、ペルセウスがアンドロメダを救った。" },
+  { constellation:"ふたご（別解）", q:"ヘレネー（トロイの美女）の兄弟はだれか？", choices:["アキレウスとパトロクロス","カストルとポルックス","ロムルスとレムス","メネラオスとアガメムノン"], ans:1, ex:"ヘレネーはカストルとポルックスの姉妹（ゼウスとレダの子）。ヘレネーの誘拐（またはパリスとの駆け落ち）がトロイア戦争の原因とされる。" },
+  { constellation:"ケンタウルス", q:"賢いケンタウロスの師・ケイロンはどのような死に方をしたか？", choices:["ヘラクレスの毒矢に誤って傷つけられ不死を放棄した","年老いて天に昇った","海に落ちて溺れた","戦いで敵に討たれた"], ans:0, ex:"ケイロンは不死の存在だったが、ヘラクレスの宴会での混乱中に毒ヒュドラの毒矢が誤って足に刺さった。不死のため死ねず苦しみ続け、プロメテウスの代わりに死を引き受け苦しみから解放された。" },
+  { constellation:"りょうけん", q:"りょうけん座はどの英雄の猟犬とされるか？", choices:["アクタイオン","オリオン","ケファロス","アドニス"], ans:1, ex:"りょうけん座はオリオンの2匹の猟犬（カニス・マヨル、カニス・マイナー）と組み合わされることが多い。ただし命名はケファロスの犬ライラプスの伝説とも結びつく。" },
+  { constellation:"うみへび（ヒュドラ）", q:"ヒュドラを退治したヘラクレスはどのような方法で倒したか？", choices:["首を切ったあと松明で焼き焦がした","毒を飲ませた","首が生えないよう全部同時に斬った","川に溺れさせた"], ans:0, ex:"ヒュドラは首を切ると2本生えてくる怪物。ヘラクレスはイオラオスに松明を持たせ、切った首をすぐに焼き焦がして再生を防いだ。最後に不死の首を岩の下に封じて倒した（12労働第2番目）。" },
+  { constellation:"さそり（追加）", q:"さそり座のアンタレスという名の意味は？", choices:["赤い惑星","アレスに対抗するもの","血の星","冥府の守り手"], ans:1, ex:"アンタレス（Antares）はギリシャ語でアンティ（対抗）＋アレス（火星の神マルス）。火星と見間違えるほど赤く明るい一等星で「火星に対抗するもの（偽の火星）」の意味を持つ。" }
+];
+
+let questions = [];
+let currentIndex = 0;
+let score = 0;
+let streak = 0;
+let maxStreak = 0;
+let answered = false;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startQuiz() {
+  questions = shuffle(QUIZZES).slice(0, 20);
+  currentIndex = 0; score = 0; streak = 0; maxStreak = 0;
+  document.getElementById('screen-start').classList.add('hidden');
+  document.getElementById('screen-quiz').classList.remove('hidden');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  const q = questions[currentIndex];
+  document.getElementById('q-counter').textContent = (currentIndex + 1) + ' / 20';
+  document.getElementById('streak-display').textContent = '連続正解: ' + streak;
+  document.getElementById('progress-bar').style.width = (currentIndex / 20 * 100) + '%';
+  document.getElementById('constellation-name').textContent = q.constellation + '座';
+  document.getElementById('question-text').textContent = q.q;
+  document.getElementById('explanation').classList.add('hidden');
+  document.getElementById('next-btn').classList.add('hidden');
+
+  drawConstellation(q.constellation);
+
+  const container = document.getElementById('choices');
+  container.innerHTML = '';
+  q.choices.forEach((c, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn w-full text-left px-5 py-3 border border-gray-700 bg-gray-900 hover:border-indigo-500 text-sm rounded-sm focus:outline-none focus:ring-2 focus:ring-indigo-400';
+    btn.setAttribute('aria-label', 'choice ' + (i+1));
+    const label = String.fromCharCode(65 + i);
+    btn.textContent = label + '. ' + c;
+    btn.onclick = () => answer(i);
+    container.appendChild(btn);
+  });
+}
+
+function answer(idx) {
+  if (answered) return;
+  answered = true;
+  const q = questions[currentIndex];
+  const btns = document.querySelectorAll('.choice-btn');
+  btns.forEach((b, i) => {
+    b.disabled = true;
+    if (i === q.ans) b.classList.add('correct');
+    else if (i === idx && idx !== q.ans) b.classList.add('wrong');
+  });
+
+  const exEl = document.getElementById('explanation');
+  const resultLabel = document.getElementById('result-label');
+  const exText = document.getElementById('explanation-text');
+  exEl.classList.remove('hidden');
+  if (idx === q.ans) {
+    score++;
+    streak++;
+    if (streak > maxStreak) maxStreak = streak;
+    resultLabel.textContent = '✓ 正解！';
+    resultLabel.className = 'text-green-400 font-bold mb-2';
+  } else {
+    streak = 0;
+    resultLabel.textContent = '✗ 不正解';
+    resultLabel.className = 'text-red-400 font-bold mb-2';
+  }
+  exText.textContent = q.ex;
+  document.getElementById('next-btn').classList.remove('hidden');
+  document.getElementById('streak-display').textContent = '連続正解: ' + streak;
+}
+
+function nextQuestion() {
+  currentIndex++;
+  if (currentIndex >= questions.length) {
+    showResult();
+  } else {
+    renderQuestion();
+  }
+}
+
+function showResult() {
+  document.getElementById('screen-quiz').classList.add('hidden');
+  document.getElementById('screen-result').classList.remove('hidden');
+  const rate = Math.round(score / questions.length * 100);
+  document.getElementById('final-score').textContent = score + ' / ' + questions.length + ' 問正解';
+  document.getElementById('final-rate').textContent = '正解率: ' + rate + '%';
+  document.getElementById('max-streak').textContent = '最大連続正解: ' + maxStreak + '問';
+  const emojis = rate >= 90 ? '🌟' : rate >= 70 ? '⭐' : rate >= 50 ? '🌙' : '🌑';
+  document.getElementById('result-emoji').textContent = emojis;
+}
+
+function restartQuiz() {
+  document.getElementById('screen-result').classList.add('hidden');
+  startQuiz();
+}
+
+const CONSTELLATIONS = {
+  "オリオン": { stars: [[140,60],[110,100],[170,100],[90,140],[190,140],[120,160],[160,160]], lines: [[0,1],[0,2],[1,2],[1,3],[2,4],[3,5],[4,6],[5,6]], color:"#a78bfa" },
+  "ペルセウス": { stars: [[140,50],[120,80],[160,80],[110,120],[140,120],[170,120],[130,155],[150,155]], lines: [[0,1],[0,2],[1,3],[1,4],[2,5],[4,6],[4,7]], color:"#60a5fa" },
+  "カシオペア": { stars: [[60,100],[90,70],[130,90],[170,70],[210,100]], lines: [[0,1],[1,2],[2,3],[3,4]], color:"#f9a8d4" },
+  "さそり": { stars: [[80,60],[100,80],[120,100],[140,110],[155,120],[165,135],[170,155],[165,170],[155,180],[140,175]], lines: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9]], color:"#fca5a5" },
+  "おとめ": { stars: [[140,50],[120,80],[160,80],[100,120],[180,120],[130,150],[150,150]], lines: [[0,1],[0,2],[1,3],[2,4],[1,5],[2,6]], color:"#86efac" },
+  "おうし": { stars: [[140,60],[110,90],[170,90],[90,130],[190,130],[70,100],[210,100]], lines: [[0,1],[0,2],[1,3],[2,4],[1,5],[2,6]], color:"#fde68a" },
+  "双子（ジェミニ）": { stars: [[100,50],[170,50],[100,90],[170,90],[100,130],[170,130],[100,165],[170,165]], lines: [[0,2],[1,3],[2,4],[3,5],[4,6],[5,7],[0,1],[4,5]], color:"#67e8f9" },
+  "いて": { stars: [[140,50],[110,80],[170,80],[90,120],[140,120],[190,120],[130,155],[150,155]], lines: [[0,1],[0,2],[1,3],[1,4],[2,5],[4,6],[4,7]], color:"#fdba74" },
+  "りゅう": { stars: [[60,60],[90,80],[130,70],[165,90],[190,120],[185,155],[165,175],[145,165],[130,150]], lines: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]], color:"#86efac" },
+  "ヘルクレス（ヘラクレス）": { stars: [[140,50],[115,80],[165,80],[100,115],[180,115],[115,150],[165,150]], lines: [[0,1],[0,2],[1,3],[2,4],[1,5],[2,6],[3,5],[4,6]], color:"#fbbf24" },
+  "こと（リラ）": { stars: [[140,60],[120,100],[160,100],[110,140],[140,140],[170,140]], lines: [[0,1],[0,2],[1,3],[1,4],[2,4],[2,5],[3,4],[4,5]], color:"#c4b5fd" },
+  "わし（アクィラ）": { stars: [[140,70],[110,100],[170,100],[90,130],[140,130],[190,130],[125,160],[155,160]], lines: [[0,1],[0,2],[1,3],[1,4],[2,5],[4,6],[4,7],[1,2]], color:"#fed7aa" },
+  "こぐま": { stars: [[140,60],[120,80],[160,80],[110,110],[140,120],[110,150],[150,155]], lines: [[0,1],[0,2],[1,3],[1,4],[3,5],[4,6]], color:"#bae6fd" },
+  "アンドロメダ": { stars: [[140,60],[110,90],[170,90],[90,125],[140,130],[190,125]], lines: [[0,1],[0,2],[1,3],[1,4],[2,5]], color:"#ddd6fe" },
+  "ケフェウス": { stars: [[140,50],[110,80],[170,80],[100,120],[180,120],[140,160]], lines: [[0,1],[0,2],[1,3],[2,4],[3,5],[4,5]], color:"#bbf7d0" },
+  "ふたご（別解）": { stars: [[100,50],[170,50],[100,90],[170,90],[100,130],[170,130]], lines: [[0,2],[1,3],[2,4],[3,5],[0,1],[4,5]], color:"#67e8f9" },
+  "ケンタウルス": { stars: [[140,50],[110,80],[170,80],[90,120],[140,110],[190,120],[120,155],[160,155]], lines: [[0,1],[0,2],[1,3],[2,4],[1,4],[2,5],[4,6],[4,7]], color:"#f9a8d4" },
+  "りょうけん": { stars: [[110,80],[170,80],[90,120],[190,120]], lines: [[0,1],[0,2],[1,3]], color:"#86efac" },
+  "うみへび（ヒュドラ）": { stars: [[60,100],[90,80],[130,90],[170,80],[200,90],[220,110],[210,135],[190,150],[170,155]], lines: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]], color:"#fca5a5" },
+  "さそり（追加）": { stars: [[80,60],[100,80],[120,100],[140,110],[155,120],[165,135],[170,155],[165,170],[155,180],[140,175]], lines: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9]], color:"#fca5a5" },
+};
+
+function drawConstellation(name) {
+  const canvas = document.getElementById('constellation-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * W, y = Math.random() * H;
+    const r = Math.random() * 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.2 + Math.random() * 0.4) + ')';
+    ctx.fill();
+  }
+
+  const data = CONSTELLATIONS[name] || CONSTELLATIONS["オリオン"];
+  ctx.strokeStyle = data.color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  data.lines.forEach(([a, b]) => {
+    ctx.beginPath();
+    ctx.moveTo(data.stars[a][0], data.stars[a][1]);
+    ctx.lineTo(data.stars[b][0], data.stars[b][1]);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  data.stars.forEach(([x, y]) => {
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = data.color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = data.color + '33';
+    ctx.fill();
+  });
+}
+
+function drawIntro() {
+  const canvas = document.getElementById('intro-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 80; i++) {
+    ctx.beginPath();
+    ctx.arc(Math.random() * W, Math.random() * H, Math.random() * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.1 + Math.random() * 0.5) + ')';
+    ctx.fill();
+  }
+  const orion = CONSTELLATIONS["オリオン"];
+  ctx.strokeStyle = orion.color;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.6;
+  orion.lines.forEach(([a, b]) => {
+    ctx.beginPath();
+    ctx.moveTo(orion.stars[a][0], orion.stars[a][1]);
+    ctx.lineTo(orion.stars[b][0], orion.stars[b][1]);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+  orion.stars.forEach(([x, y]) => {
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = orion.color; ctx.fill();
+  });
+}
+
+function createBgStars() {
+  const container = document.getElementById('bg-stars');
+  for (let i = 0; i < 100; i++) {
+    const s = document.createElement('div');
+    const size = Math.random() * 2 + 0.5;
+    s.className = 'star';
+    s.style.cssText = `width:${size}px;height:${size}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${2+Math.random()*4}s;animation-delay:${Math.random()*4}s`;
+    container.appendChild(s);
+  }
+}
+
+createBgStars();
+drawIntro();
+</script>
+</body>
+</html>
